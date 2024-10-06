@@ -19,7 +19,7 @@ transcription = lambda f: transcription_methods.setdefault(f.__name__, f)
 
 
 @transcription
-def british(word: str, strip_syllable_separator: bool) -> str:
+def british(word: str, strip_syllable_separator: bool=True) -> list:
     payload = {'action': 'parse', 'page': word, 'format': 'json', 'prop': 'wikitext'}
     r = requests.get('https://en.wiktionary.org/w/api.php', params=payload)
     try:
@@ -37,12 +37,12 @@ def british(word: str, strip_syllable_separator: bool) -> str:
             m = p.search(wikitext)
             
         ipa = m.group(1)
-        return remove_special_chars(word=ipa, strip_syllable_separator=strip_syllable_separator)
+        return [remove_special_chars(word=ipa, strip_syllable_separator=strip_syllable_separator)]
     except (KeyError, AttributeError):
-        return ""
+        return []
 
 @transcription
-def american(word: str, strip_syllable_separator: bool) -> str:
+def american(word: str, strip_syllable_separator: bool=True) -> list:
     payload = {'action': 'parse', 'page': word, 'format': 'json', 'prop': 'wikitext'}
     r = requests.get('https://en.wiktionary.org/w/api.php', params=payload)
     try:
@@ -63,15 +63,15 @@ def american(word: str, strip_syllable_separator: bool) -> str:
             m = p.search(wikitext)
 
         ipa = m.group(1)
-        return remove_special_chars(word=ipa, strip_syllable_separator=strip_syllable_separator)
+        return [remove_special_chars(word=ipa, strip_syllable_separator=strip_syllable_separator)]
     except (KeyError, AttributeError):
-        return ""
+        return []
 
 @transcription
-def french(word: str, strip_syllable_separator: bool) -> str:
+def french(word: str, strip_syllable_separator: bool=True) -> list:
     link = f"https://fr.wiktionary.org/wiki/{word}"
-    return ", ".join(parse_website(link, {'title': 'Prononciation API'}, strip_syllable_separator,
-                         filter_cb = fr_filter))
+    return parse_website(link, {'title': 'Prononciation API'}, strip_syllable_separator,
+                         filter_cb = fr_filter)
 
 def fr_filter(tag: bs4.Tag) -> bool:
     # avoid using non-french transcriptions
@@ -84,17 +84,17 @@ def fr_filter(tag: bs4.Tag) -> bool:
     return True
 
 @transcription
-def russian(word: str, strip_syllable_separator: bool) -> str:
+def russian(word: str, strip_syllable_separator: bool=True) -> list:
     link = f"https://ru.wiktionary.org/wiki/{word}"
-    return ", ".join(parse_website(link, {'class': 'IPA'}, strip_syllable_separator))
+    return parse_website(link, {'class': 'IPA'}, strip_syllable_separator)
 
 @transcription
-def spanish(word: str, strip_syllable_separator: bool) -> str:
+def spanish(word: str, strip_syllable_separator: bool=True) -> list:
     link = f"https://es.wiktionary.org/wiki/{word}"
-    return ", ".join(parse_website(link, {'class': 'ipa'}, strip_syllable_separator))
+    return parse_website(link, {'class': 'ipa'}, strip_syllable_separator)
 
 @transcription
-def german(word: str, strip_syllable_separator: bool) -> str:
+def german(word: str, strip_syllable_separator: bool=True) -> list:
     payload = {'action': 'parse', 'page': word, 'format': 'json', 'prop': 'wikitext'}
     r = requests.get('https://de.wiktionary.org/w/api.php', params=payload)
     try:
@@ -102,21 +102,21 @@ def german(word: str, strip_syllable_separator: bool) -> str:
         p = re.compile("{{IPA}}.*?{{Lautschrift\|([^}]+)")
         m = p.search(wikitext)
         ipa = m.group(1)
-        return ipa
+        return [ipa]
     except (KeyError, AttributeError):
-        return ""
+        return []
 
 @transcription
-def polish(word: str, strip_syllable_separator: bool) -> str:
+def polish(word: str, strip_syllable_separator: bool=True) -> list:
     link = f"https://pl.wiktionary.org/wiki/{word}"
-    return ", ".join(parse_website(
-        link, {'title': 'To jest wymowa w zapisie IPA; zobacz hasło IPA w Wikipedii'}, strip_syllable_separator))
+    return parse_website(
+        link, {'title': 'To jest wymowa w zapisie IPA; zobacz hasło IPA w Wikipedii'}, strip_syllable_separator)
 
 
 @transcription
-def dutch(word: str, strip_syllable_separator: bool) -> str:
+def dutch(word: str, strip_syllable_separator: bool=True) -> list:
     link = f"https://nl.wiktionary.org/wiki/{word}"
-    return ", ".join(parse_website(link, {"class": "IPAtekst"}, strip_syllable_separator))
+    return parse_website(link, {"class": "IPAtekst"}, strip_syllable_separator)
 
 
 def parse_website(link: str, css_code: dict, strip_syllable_separator: bool=True,
@@ -161,4 +161,10 @@ def remove_special_chars(word: str, strip_syllable_separator: bool) -> str:
 def transcript(words: List[str], language: str, strip_syllable_separator: bool=True) -> str:
     transcription_method = transcription_methods[language]
     transcribed_words = [transcription_method(word, strip_syllable_separator) for word in words]
-    return " ".join(transcribed_words)
+    if len(words)==1: # only one word, list all found transcriptions
+        return ", ".join(transcribed_words[0])
+    elif all(el for el in transcribed_words):
+        # return only first transcriptions if the line contains several words
+        return " ".join(map(lambda lst: lst[0], transcribed_words))
+    else: # if transcriptions for some words are missing don't return anything
+        return ""
