@@ -81,6 +81,10 @@ def fr_filter(tag: bs4.Tag) -> bool:
     # avoid adding results from flextable as it may contain transcriptions for other forms
     if tag.find_parent('table', {'class': 'flextable'}):
         return False
+    # avoid adding results from the etymology section
+    header3_div = tag.find_previous('div', {'class': 'mw-heading3'})
+    if header3_div and header3_div.find('h3', {'id': u'Étymologie'}):
+        return False
     return True
 
 @transcription
