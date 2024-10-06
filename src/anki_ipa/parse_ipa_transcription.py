@@ -11,7 +11,7 @@ import urllib
 import bs4
 import re
 import requests
-from typing import List
+from typing import List, Callable
 
 # Create a dictionary for all transcription methods
 transcription_methods = {}
@@ -70,20 +70,28 @@ def american(word: str, strip_syllable_separator: bool) -> str:
 @transcription
 def french(word: str, strip_syllable_separator: bool) -> str:
     link = f"https://fr.wiktionary.org/wiki/{word}"
-    return ", ".join(parse_website(link, {'title': 'Prononciation API'}, strip_syllable_separator))
+    return ", ".join(parse_website(link, {'title': 'Prononciation API'}, strip_syllable_separator,
+                         filter_cb = fr_filter))
 
+def fr_filter(tag: bs4.Tag) -> bool:
+    # avoid using non-french transcriptions
+    sectionlangue = tag.find_previous('span', {'class': 'sectionlangue'})
+    if sectionlangue and sectionlangue['id'] and sectionlangue['id'] != 'fr':
+        return False
+    # avoid adding results from flextable as it may contain transcriptions for other forms
+    if tag.find_parent('table', {'class': 'flextable'}):
+        return False
+    return True
 
 @transcription
 def russian(word: str, strip_syllable_separator: bool) -> str:
     link = f"https://ru.wiktionary.org/wiki/{word}"
     return ", ".join(parse_website(link, {'class': 'IPA'}, strip_syllable_separator))
 
-
 @transcription
 def spanish(word: str, strip_syllable_separator: bool) -> str:
     link = f"https://es.wiktionary.org/wiki/{word}"
     return ", ".join(parse_website(link, {'class': 'ipa'}, strip_syllable_separator))
-
 
 @transcription
 def german(word: str, strip_syllable_separator: bool) -> str:
@@ -110,36 +118,45 @@ def dutch(word: str, strip_syllable_separator: bool) -> str:
     link = f"https://nl.wiktionary.org/wiki/{word}"
     return ", ".join(parse_website(link, {"class": "IPAtekst"}, strip_syllable_separator))
 
-def parse_website(link: str, css_code: dict, strip_syllable_separator: bool=True) -> List[str]:
+
+def parse_website(link: str, css_code: dict, strip_syllable_separator: bool=True,
+                  filter_cb: Callable[[bs4.Tag],bool] = None) -> List[str]:
+    soup = get_html_content(link)
+    if not soup:
+        return []
+    results = soup.find_all('span', css_code)
+
+    if filter_cb:
+        results = filter(filter_cb, results);
+
+    transcriptions = map(lambda result: remove_special_chars(result.getText(), strip_syllable_separator), results)
+
+    _transcriptions = remove_duplicates(transcriptions)
+    return _transcriptions
+
+def get_html_content(link: str) -> bs4.BeautifulSoup:
     try:
         website = requests.get(link)
     except requests.exceptions.RequestException as e:
-        return [""]
-    soup = bs4.BeautifulSoup(website.text, "html.parser")
-    results = soup.find_all('span', css_code) 
-    if strip_syllable_separator:
-        transcriptions = map(lambda result: result.getText()
-            .replace("/", "")
-            .replace("]", "")
-            .replace("[", "")
-            .replace(".", "")
-            .replace("\\", ""), results)
-    else:
-        transcriptions = map(lambda result: result.getText()
-            .replace("/", "")
-            .replace("]", "")
-            .replace("[", "")
-            .replace("\\", ""), results)
-    _transcriptions = sorted(list(set(transcriptions))[0])
-    return _transcriptions
+        return None
+    return bs4.BeautifulSoup(website.text, "html.parser")
 
+
+### Removes duplicates from the list without reordering it
+def remove_duplicates(seq: list) -> list:
+    seen = set()
+    rv = list()
+    for el in seq:
+        if el not in seen:
+            rv.append(el)
+            seen.add(el)
+    return rv
 
 def remove_special_chars(word: str, strip_syllable_separator: bool) -> str:
-    word = word.replace("/", "").replace("]", "").replace("[", "").replace("\\", "").replace(".", "")
+    word = word.replace("/", "").replace("]", "").replace("[", "").replace("\\", "")
     if strip_syllable_separator:
         word = word.replace(".", "")
     return word
-
 
 def transcript(words: List[str], language: str, strip_syllable_separator: bool=True) -> str:
     transcription_method = transcription_methods[language]
