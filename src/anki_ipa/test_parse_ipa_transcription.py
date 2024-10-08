@@ -21,28 +21,41 @@ class TestParseIpa(unittest.TestCase):
         self.assertEqual(parse_ipa.british("box"), ["bɒks"])
         # * {{a|UK}} {{IPA|en|/bɜːst/}}
         self.assertEqual(parse_ipa.british("burst"), ["bɜːst"])
-        self.assertEqual(parse_ipa.british("hill"), ["hɪl", "hɪɫ"])
+        self.assertEqual(parse_ipa.british("hill"), ["hɪɫ", "hɪl"])
         # {{a|RP|GA}} {{IPA|en|/bæk/|[bæk]|[bak]|[-k̚]|[-ˀk]}}
-        self.assertEqual(parse_ipa.british("back"), ["bæk","bæk","bak","-k̚","-ˀk"])
+        self.assertEqual(parse_ipa.british("back"), ["bæk","bak","-k̚","-ˀk"])
         # {{a|RP}} {{IPA|en|/ɹɪˈɡɑːd/}}
         self.assertEqual(parse_ipa.british("regard"), ["ɹɪˈɡɑːd"])
         self.assertEqual(parse_ipa.british("out"), ["aʊt"])
 
+        # A complex phrase
+        self.assertEqual(parse_ipa.transcript(["schedule", "advertisement"], 'british'),
+                         "ˈʃɛdjuːl ədˈvɜːtɪsmənt")
+
+        # some Generic english test
+        self.assertEqual(parse_ipa.british("emmener"), []) # not an English word
+        self.assertEqual(parse_ipa.transcript([], 'british'), "") # string with no words
+
+
     def test_american(self):
         # * {{a|GA}} {{IPA|en|/ˈt͡ʃɑɹ.koʊl/}}
         self.assertEqual(parse_ipa.american("charcoal"), ["ˈt͡ʃɑɹkoʊl"])
-        self.assertEqual(parse_ipa.american("dog"), ["dɒɡ"])
+        self.assertEqual(parse_ipa.american("dog"), ["dɔɡ"])
         self.assertEqual(parse_ipa.american("thumb"), ["θʌm"])
         self.assertEqual(parse_ipa.american("box"), ["bɑks"])
         # * {{a|US}} {{IPA|en|/bɝst/}}
-        self.assertEqual(parse_ipa.american("burst"), ["bɚst"])
+        self.assertEqual(parse_ipa.american("burst"), ["bɝst"])
         # {{enPR|hĭl}}, {{IPA|en|/hɪl/|[hɪɫ]}}
-        self.assertEqual(parse_ipa.american("hill"), ["hɪl", "hɪɫ"])
+        self.assertEqual(parse_ipa.american("hill"), ["hɪɫ", "hɪl"])
         # {{a|RP|GA}} {{IPA|en|/bæk/|[bæk]|[bak]|[-k̚]|[-ˀk]}}
-        self.assertEqual(parse_ipa.american("back"), ["bæk","bæk","bak","-k̚","-ˀk"])
+        self.assertEqual(parse_ipa.american("back"), ["bæk","bak","-k̚","-ˀk"])
         # {{a|GenAm}} {{IPA|en|/ɹɪˈɡɑɹd/}}
         self.assertEqual(parse_ipa.american("regard"), ["ɹɪˈɡɑɹd"])
         self.assertEqual(parse_ipa.american("out"), ["aʊt"])
+
+        # A complex phrase
+        self.assertEqual(parse_ipa.transcript(["schedule", "advertisement"], 'american'),
+                         "ˈskɛd͡ʒʊl ˈædvɚˌtaɪzmənt")
 
     def test_russian(self):
         self.assertEqual(parse_ipa.russian("спасибо"), ["spɐˈsʲibə"])

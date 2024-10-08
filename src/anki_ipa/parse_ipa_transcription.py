@@ -11,6 +11,7 @@ import urllib
 import bs4
 import re
 import requests
+import itertools as it
 from typing import List, Callable
 
 # Create a dictionary for all transcription methods
@@ -20,50 +21,63 @@ transcription = lambda f: transcription_methods.setdefault(f.__name__, f)
 
 @transcription
 def british(word: str, strip_syllable_separator: bool=True) -> list:
-    payload = {'action': 'parse', 'page': word, 'format': 'json', 'prop': 'wikitext'}
-    r = requests.get('https://en.wiktionary.org/w/api.php', params=payload)
-    try:
-        wikitext = r.json()['parse']['wikitext']['*']
-        p = re.compile("{{a\|UK}} {{IPA\|en\|([^}]+)}}")
-        m = p.search(wikitext)
-        if m is None:
-            p = re.compile("{{a\|RP}} {{IPA\|en\|([^}]+)}}")
-            m = p.search(wikitext)
-        if m is None: 
-            p = re.compile("{{IPA\|en\|([^}]+)}}")
-            m = p.search(wikitext)
-        if m is None: 
-            p = re.compile("{{IPA\|en\|([^}]+)\|([^}]+)}}")
-            m = p.search(wikitext)
-            
-        ipa = m.group(1)
-        return [remove_special_chars(word=ipa, strip_syllable_separator=strip_syllable_separator)]
-    except (KeyError, AttributeError):
-        return []
+    return english_transcript(word, strip_syllable_separator, ['RP','UK',''])
 
 @transcription
 def american(word: str, strip_syllable_separator: bool=True) -> list:
+    return english_transcript(word, strip_syllable_separator, ['US','GA','GenAm',''])
+
+def english_transcript(word: str, strip_syllable_separator: bool=True, accents: List[str]=[] ) -> list:
     payload = {'action': 'parse', 'page': word, 'format': 'json', 'prop': 'wikitext'}
     r = requests.get('https://en.wiktionary.org/w/api.php', params=payload)
     try:
         wikitext = r.json()['parse']['wikitext']['*']
-        p = re.compile("{{a\|US}} {{IPA\|en\|([^}]+)}}")
-        m = p.search(wikitext)
-        if m is None: 
-            p = re.compile("{{a\|GA}}.*?{{IPA\|en\|([^}]+)}}")
-            m = p.search(wikitext)
-        if m is None: 
-            p = re.compile("{{a\|GenAm}}.*?{{IPA\|en\|([^}]+)}}")
-            m = p.search(wikitext)
-        if m is None:
-            p = re.compile("{{IPA\|en\|([^}]+)}}")
-            m = p.search(wikitext)
-        if m is None:
-            p = re.compile("{{IPA\|en\|([^}]+)\|([^}]+)}}")
-            m = p.search(wikitext)
+        # list of tupeles (accent, ipa),
+        # avoid to use set to preserve the order of translation we encountered
+        transcriptions = []
+        # Next variations of the markup are considered:
+        #   * {{IPA|en|/dɒɡ/|a=RP}}
+        #   * {{IPA|en|/ˈkæn/|[ˈkʰan]|[ˈkʰæn]|a=RP,Ireland}}
+        #   * {{IPA|en|/ˈkæn/|[ˈkʰæn]|[ˈkʰɛən ~ ˈkʰeən]|a=GA,Canada|aa=see {{w|/æ/ raising}}}}
+        #   * {{IPA|en|/kən/|[kʰən]|[kʰn̩]}}
+        #   * {{IPA|en|[hɪo̯]|[hɪʊ̯]|a=[[w:L-vocalization|l-vocalizing]]:,_,UK,AU,NZ}}
+        #   * {{enPR|dôg|a=GA}}, {{IPA|en|/dɔɡ/}}
+        for m in re.findall( r"(?:{{enPR\|(.*?)}},?\s*)?{{IPA\|en\|(.+?)}}", wikitext ):
+            ipas = []
+            ipa_accents = []
+            if m[0]:
+                for el in m[0].split('|'):
+                    if el.startswith("a="):
+                        ipa_accents.extend(el[2:].split(','))
 
-        ipa = m.group(1)
-        return [remove_special_chars(word=ipa, strip_syllable_separator=strip_syllable_separator)]
+            ipa_args = re.sub(r"\[\[\s*(.*?)\s*\|\s*(.*?)\s*\]\]", r'\g<2>', m[1])
+            for el in ipa_args.split('|'):
+                if '=' in el:
+                    if el.startswith("a="):
+                        ipa_accents.extend(el[2:].split(','))
+                    else:
+                        pass # don't process other parameters like 'aa='
+                else:
+                    ipas.append(el)
+            if ipa_accents:
+                for ac in ipa_accents:
+                    if ipa_accents[0].endswith(':'):
+                        break # avoid adding unusual accents groups like 'l-vocalizing:' etc
+                    transcriptions.extend(it.product([ac], ipas))
+            else:
+                transcriptions.extend(it.product([''], ipas))
+
+        wanted_transcriptions = []
+        for wanted_acc in accents: # this will both filter and prioterize earlier accents and transcriptions
+            for (ac, ipa) in transcriptions:
+                if ac == wanted_acc:
+                    wanted_transcriptions.append(ipa)
+        # if there are some transcriptions but not from the list we want, make sure we will get just something
+        if transcriptions and not wanted_transcriptions:
+            wanted_transcriptions = translations[0][1]
+        wanted_transcriptions = map(lambda ipa: remove_special_chars(ipa, strip_syllable_separator),
+                                    wanted_transcriptions)
+        return remove_duplicates(wanted_transcriptions)
     except (KeyError, AttributeError):
         return []
 
