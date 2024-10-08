@@ -18,7 +18,7 @@ from aqt.editor import Editor
 from aqt.utils import showInfo
 
 from . import consts, parse_ipa_transcription, utils, batch_adding
-from .config import setup_synced_config
+from .config import setup_synced_config, get_default_lang, set_default_lang
 from typing import List, Callable
 
 filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app.log")
@@ -75,35 +75,6 @@ def paste_ipa(editor: Editor) -> None:
     editor.web.setFocus()
 
 
-def get_deck_name(main_window: mw) -> str:
-    """ Get the name of the current deck.
-
-    :param main_window: main window of Anki
-    :return: name of selected deck
-    """
-    try:
-        deck_name = main_window.col.decks.current()['name']
-    except AttributeError:
-        # No deck opened?
-        deck_name = None
-    return deck_name
-
-
-def get_default_lang(main_window: mw) -> str:
-    """ Get the IPA default language.
-
-    :param main_window: main window of Anki
-    :return: default IPA language for Anki or Anki deck
-    """
-    config = mw.col.conf['anki_ipa_conf']
-    lang = config['lang']
-    if config['defaultlangperdeck']:
-        deck_name = get_deck_name(main_window)
-        if deck_name and deck_name in config['deckdefaultlang']:
-            lang = config['deckdefaultlang'][deck_name]
-    return lang
-
-
 def on_setup_buttons(buttons: List[str], editor: Editor) -> List[str]:
     """ Add Addon button and Addon combobox to card editor.
 
@@ -130,20 +101,6 @@ def on_setup_buttons(buttons: List[str], editor: Editor) -> List[str]:
     buttons.append(combo)
 
     return buttons
-
-
-def set_default_lang(main_window: mw, lang: str) -> None:
-    """ Set new IPA default language.
-
-    :param main_window: main window of Anki
-    :param lang: new default language
-    """
-    config = mw.col.conf['anki_ipa_conf']
-    config['lang'] = lang  # Always update the overall default
-    if config['defaultlangperdeck']:
-        deck_name = get_deck_name(main_window)
-        if deck_name:
-            config['deckdefaultlang'][deck_name] = lang
 
 
 def on_ipa_language_select(editor: Editor, lang: str) -> None:
