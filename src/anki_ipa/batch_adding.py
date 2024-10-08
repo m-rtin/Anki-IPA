@@ -13,6 +13,9 @@ from aqt.utils import tooltip, askUser
 import aqt.qt as qt
 import anki
 
+from aqt.operations import CollectionOp
+from anki.collection import Collection, OpChangesOnly
+
 from aqt import mw
 CONFIG = mw.addonManager.getConfig(__name__)
 
@@ -162,22 +165,17 @@ class AddIpaTranscriptDialog(qt.QDialog):
 
         :param result_dict: dictionary of Anki notes and their IPA transcriptions
         """
-        mw = self.browser.mw
-        mw.checkpoint("add ipa transcription")
-        mw.progress.start()
-        self.browser.model.beginReset()
-
-        for note_id, ipa_transcription in result_dict.items():
-            note = mw.col.get_note(note_id)
+        def op(col: Collection) -> OpChangesOnly :
+            notes = []
             target_field = self.field_combobox.currentText()
-            note[target_field] = ipa_transcription
-            note.flush()
+            for note_id, ipa_transcription in result_dict.items():
+                note = col.get_note(note_id)
+                note[target_field] = ipa_transcription
+                notes.append(note)
 
-        self.browser.model.endReset()
-        # mw.requireReset()
-        mw.CollectionOp()
-        mw.progress.finish()
-        mw.reset()
+            return OpChangesOnly(changes=col.update_notes(notes))
+
+        CollectionOp(parent=self.browser, op=op).run_in_background()
 
     def closeEvent(self, event: qt.QCloseEvent) -> None:
         """ Stop worker and thread when window is closed by user.
