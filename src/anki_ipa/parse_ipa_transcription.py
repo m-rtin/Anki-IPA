@@ -109,7 +109,23 @@ def russian(word: str, strip_syllable_separator: bool=True) -> list:
 @transcription
 def spanish(word: str, strip_syllable_separator: bool=True) -> list:
     link = f"https://es.wiktionary.org/wiki/{word}"
-    return parse_website(link, {'class': 'ipa'}, strip_syllable_separator)
+    soup = get_html_content(link)
+
+    transcriptions = []
+    for tbl in soup.find_all('table', {'class': 'pron-graf'}):
+        section_header = tbl.find_previous('div', {'class': 'mw-heading2'})
+        if not section_header or not section_header.find('span', {'class': 'headline-lang', 'id': 'es'}):
+            continue # it's not a spanish entry
+        for raw in tbl.find_all('tr'):
+            tds=raw.find_all('td')
+            if tds and len(tds) == 2 and tds[0].getText().find('(API)'):
+                m = re.match(r'\[(.+?)\]', tds[1].getText())
+                if m and m[0]:
+                    transcriptions.append(m[0])
+
+    transcriptions = map(lambda t: remove_special_chars(t, strip_syllable_separator), transcriptions)
+
+    return remove_duplicates(transcriptions)
 
 @transcription
 def german(word: str, strip_syllable_separator: bool=True) -> list:

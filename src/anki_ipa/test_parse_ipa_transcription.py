@@ -74,6 +74,10 @@ class TestParseIpa(unittest.TestCase):
 
     def test_spanish(self):
         self.assertEqual(parse_ipa.spanish("eternidad"), ["eteɾniˈðað"])
+        # has non-spanish entry
+        self.assertEqual(parse_ipa.spanish("actor"), ["açˈtoɾ"])
+        # has several pronosiations
+        self.assertEqual(parse_ipa.spanish("elle"), ["ˈeʝe", "ˈeʎe", "ˈeʃe", "ˈeʒe"])
 
     def test_german(self):
         self.assertEqual(parse_ipa.german("Land"), ["lant"])
