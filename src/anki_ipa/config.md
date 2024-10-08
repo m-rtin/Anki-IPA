@@ -14,3 +14,5 @@ Help for configuration options.
 &nbsp;
 
 - **`"STRIP_SYLLABLE_SEPARATOR"`**: IPA syntax includes a period (.) between two syllables when betweem two consecutive vowels in hiatus.  For example `kre.entsa`.  By default this is stripped out but if desired it can be retained.
+
+- `"ALL_TRANSCRIPTIONS"`: if several transcriptions all availible for a single-word entry, all of them will be added to the IPA field. If `false` only the best match will be added. Multi-word entries are always trinscribed with a single word.

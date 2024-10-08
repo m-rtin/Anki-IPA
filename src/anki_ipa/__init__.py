@@ -57,7 +57,9 @@ def paste_ipa(editor: Editor) -> None:
 
     # parse IPA transcription for every word in word list
     try:
-        ipa = parse_ipa_transcription.transcript(words=words, language=lang_alias, strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"])
+        ipa = parse_ipa_transcription.transcript(words=words, language=lang_alias,
+                                                 strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"],
+                                                 all_transcriptions=CONFIG["ALL_TRANSCRIPTIONS"])
     except (urllib.error.HTTPError, IndexError):
         showInfo("IPA not found.")
         return

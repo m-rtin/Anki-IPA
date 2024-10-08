@@ -192,11 +192,16 @@ def remove_special_chars(word: str, strip_syllable_separator: bool) -> str:
         word = word.replace(".", "")
     return word
 
-def transcript(words: List[str], language: str, strip_syllable_separator: bool=True) -> str:
+def transcript(words: List[str], language: str,
+               strip_syllable_separator: bool=True,
+               all_transcriptions:bool=True) -> str:
     transcription_method = transcription_methods[language]
     transcribed_words = [transcription_method(word, strip_syllable_separator) for word in words]
-    if len(words)==1: # only one word, list all found transcriptions
-        return ", ".join(transcribed_words[0])
+    if len(words)==1: # only one word, list all/one IPAs depending on the option
+        if all_transcriptions:
+            return ", ".join(transcribed_words[0])
+        else:
+            return transcribed_words[0][0]
     elif all(el for el in transcribed_words):
         # return only first transcriptions if the line contains several words
         return " ".join(map(lambda lst: lst[0], transcribed_words))
