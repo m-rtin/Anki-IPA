@@ -18,6 +18,7 @@ CONFIG = mw.addonManager.getConfig(__name__)
 
 from typing import List, Dict
 from . import consts, parse_ipa_transcription, utils
+from .config import get_default_lang
 
 class AddIpaTranscriptDialog(qt.QDialog):
     """QDialog to add IPA transcription to multiple notes in Anki browser."""
@@ -44,10 +45,17 @@ class AddIpaTranscriptDialog(qt.QDialog):
 
         self.lang_combobox = qt.QComboBox()
         self.lang_combobox.addItems(consts.LANGUAGES_MAP.values())
+
         if "LANGUAGE" in CONFIG.keys():
-            idx_language=self.lang_combobox.findText(CONFIG["LANGUAGE"])
+            language = CONFIG["LANGUAGE"]
+        else:
+            language = consts.LANGUAGES_MAP.get(get_default_lang(self.browser.mw), None)
+
+        if language:
+            idx_language=self.lang_combobox.findText(language)
             if idx_language > 0:
                 self.lang_combobox.setCurrentIndex(idx_language)
+
         self.base_combobox = qt.QComboBox()
         self.base_combobox.addItems(fields)
         if "WORD_FIELD" in CONFIG.keys():
