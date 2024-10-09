@@ -216,7 +216,10 @@ class Worker(qt.QObject):
         for index, key in enumerate(self.notes.keys()):
             try:
                 words = utils.get_words_from_field(field_text=self.notes[key][self.base_field])
-                new_dict[key] = parse_ipa_transcription.transcript(words=words, language=self.lang)
+                new_dict[key] = parse_ipa_transcription.transcript(words=words, language=self.lang,
+                                                 strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"],
+                                                 all_transcriptions=CONFIG["ALL_TRANSCRIPTIONS"],
+                                                 failure_strategy=CONFIG["FAILURE_STRATEGY"])
             # IPA transcription not found
             except (urllib.error.HTTPError, IndexError):
                 continue
