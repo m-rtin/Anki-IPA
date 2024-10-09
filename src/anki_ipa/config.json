@@ -3,5 +3,6 @@
     "IPA_FIELD": "IPA",
     "KEYBOARD_SHORTCUT": "Ctrl+Shift+Z",
     "STRIP_SYLLABLE_SEPARATOR": true,
-    "ALL_TRANSCRIPTIONS": true
+    "ALL_TRANSCRIPTIONS": true,
+    "FAILURE_STRATEGY": "show"
 }

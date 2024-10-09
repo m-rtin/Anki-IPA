@@ -28,14 +28,9 @@ class TestParseIpa(unittest.TestCase):
         self.assertEqual(parse_ipa.british("regard"), ["ɹɪˈɡɑːd"])
         self.assertEqual(parse_ipa.british("out"), ["aʊt"])
 
-        # A complex phrase
-        self.assertEqual(parse_ipa.transcript(["schedule", "advertisement"], 'british'),
-                         "ˈʃɛdjuːl ədˈvɜːtɪsmənt")
-
-        # some Generic english test
-        self.assertEqual(parse_ipa.british("emmener"), []) # not an English word
-        self.assertEqual(parse_ipa.transcript([], 'british'), "") # string with no words
-
+        # some tests expected to return nothing
+        self.assertEqual(parse_ipa.british("nosuchword"), [])
+        self.assertEqual(parse_ipa.british("emmener"), [])
 
     def test_american(self):
         # * {{a|GA}} {{IPA|en|/ˈt͡ʃɑɹ.koʊl/}}
@@ -53,10 +48,6 @@ class TestParseIpa(unittest.TestCase):
         self.assertEqual(parse_ipa.american("regard"), ["ɹɪˈɡɑɹd"])
         self.assertEqual(parse_ipa.american("out"), ["aʊt"])
 
-        # A complex phrase
-        self.assertEqual(parse_ipa.transcript(["schedule", "advertisement"], 'american'),
-                         "ˈskɛd͡ʒʊl ˈædvɚˌtaɪzmənt")
-
     def test_russian(self):
         self.assertEqual(parse_ipa.russian("спасибо"), ["spɐˈsʲibə"])
 
@@ -64,13 +55,8 @@ class TestParseIpa(unittest.TestCase):
         self.assertEqual(parse_ipa.french("occasion"),  [ "ɔkazjɔ̃" ])
         self.assertEqual(parse_ipa.french("rencontre"), [ "ʁɑ̃kɔ̃tʁ" ])
         self.assertEqual(parse_ipa.french("cheval"), [ "ʃəval", "ʃfal", "ʃval", "ʒval", "ʃoval" ])
+        self.assertEqual(parse_ipa.french("thereisnosuchword"), []) # non-existent word
         self.assertEqual(parse_ipa.french("dog"), []) # not a french word
-        self.assertEqual(parse_ipa.transcript(["cheval"], 'french'),
-                         "ʃəval, ʃfal, ʃval, ʒval, ʃoval")
-        self.assertEqual(parse_ipa.transcript(["le", "chat"], 'french'), "lə ʃa")
-        # a string with a non-existing word
-        self.assertEqual(parse_ipa.transcript(["le", "boulangery"], 'french'), "")
-        self.assertEqual(parse_ipa.transcript([], 'french'), "") # no words
 
     def test_spanish(self):
         self.assertEqual(parse_ipa.spanish("eternidad"), ["eteɾniˈðað"])
@@ -115,6 +101,43 @@ class TestParseIpa(unittest.TestCase):
     def test_dutch(self):
         self.assertEqual(parse_ipa.dutch("wit"), ["ʋɪt", "wit", "wɪt"])
         self.assertEqual(parse_ipa.dutch("lucht"), ["lʏxt"])
+
+class TestTranscript(unittest.TestCase):
+
+    def test_generic(self):
+        # some simple phrases
+        self.assertEqual(parse_ipa.transcript(["schedule", "advertisement"], 'british'),
+                         "ˈʃɛdjuːl ədˈvɜːtɪsmənt")
+        self.assertEqual(parse_ipa.transcript(["schedule", "advertisement"], 'american'),
+                         "ˈskɛd͡ʒʊl ˈædvɚˌtaɪzmənt")
+        # empty string
+        self.assertEqual(parse_ipa.transcript([], 'british'), "")
+
+    def test_strip_syllable_separator(self):
+        self.assertEqual(parse_ipa.transcript(["fanfaronner"], 'french', strip_syllable_separator=False), "fɑ̃.fa.ʁɔ.ne" )
+        self.assertEqual(parse_ipa.transcript(["fanfaronner"], 'french', strip_syllable_separator=True),  "fɑ̃faʁɔne"    )
+
+    def test_all_transcriptions(self):
+        self.assertEqual(parse_ipa.transcript(["bowl"], "british", all_transcriptions=True),  "bəʊl, bɒʊɫ" )
+        self.assertEqual(parse_ipa.transcript(["bowl"], "british", all_transcriptions=False), "bəʊl" )
+        self.assertEqual(parse_ipa.transcript(["big", "bowl"], "british", all_transcriptions=True),  "bɪɡ bəʊl" )
+        self.assertEqual(parse_ipa.transcript(["big", "bowl"], "british", all_transcriptions=False), "bɪɡ bəʊl" )
+
+    def test_failure_strategy(self):
+        self.assertEqual(parse_ipa.transcript(["nosuchword"], "british", failure_strategy='show'),    "~???~")
+        self.assertEqual(parse_ipa.transcript(["nosuchword"], "british", failure_strategy='partial'), "")
+        self.assertEqual(parse_ipa.transcript(["nosuchword"], "british", failure_strategy='whole'),   "~???~")
+        self.assertEqual(parse_ipa.transcript(["nosuchword"], "british", failure_strategy='hide'),    "")
+
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "dog"], "british", failure_strategy='show'),    "~???~ dɒɡ")
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "dog"], "british", failure_strategy='partial'), "~???~ dɒɡ")
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "dog"], "british", failure_strategy='whole'),   "~???~")
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "dog"], "british", failure_strategy='hide'),    "")
+
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "andnosuch"], "british", failure_strategy='show'),    "~???~")
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "andnosuch"], "british", failure_strategy='partial'), "")
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "andnosuch"], "british", failure_strategy='whole'),   "~???~")
+        self.assertEqual(parse_ipa.transcript(["nosuchword", "andnosuch"], "british", failure_strategy='hide'),    "")
 
 if __name__ == "__main__":
     unittest.main()

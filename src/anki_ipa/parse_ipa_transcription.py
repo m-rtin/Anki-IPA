@@ -12,7 +12,9 @@ import bs4
 import re
 import requests
 import itertools as it
-from typing import List, Callable
+from typing import Callable, List, Literal
+
+ERROR_MARKER = "~???~"
 
 # Create a dictionary for all transcription methods
 transcription_methods = {}
@@ -194,16 +196,29 @@ def remove_special_chars(word: str, strip_syllable_separator: bool) -> str:
 
 def transcript(words: List[str], language: str,
                strip_syllable_separator: bool=True,
-               all_transcriptions:bool=True) -> str:
+               all_transcriptions: bool=True,
+               failure_strategy: Literal['show', 'partial', 'whole', 'hide'] = 'hide') -> str:
+    if not words or (not any(words)):
+        return "";
+
+    show_partial_failure = failure_strategy in ['show', 'partial']
+    show_whole_failure   = failure_strategy in ['show', 'whole']
+
+    # actually do the work
     transcription_method = transcription_methods[language]
     transcribed_words = [transcription_method(word, strip_syllable_separator) for word in words]
-    if len(words)==1: # only one word, list all/one IPAs depending on the option
+
+    if (not any(transcribed_words)) or \
+       (not all(transcribed_words) and not show_partial_failure):
+        if show_whole_failure:
+            return ERROR_MARKER
+        else:
+            return ""
+
+    if len(words)==1: # only one word, list all/one IPAs depending on the options
         if all_transcriptions:
             return ", ".join(transcribed_words[0])
         else:
             return transcribed_words[0][0]
-    elif all(el for el in transcribed_words):
-        # return only first transcriptions if the line contains several words
-        return " ".join(map(lambda lst: lst[0], transcribed_words))
-    else: # if transcriptions for some words are missing don't return anything
-        return ""
+    else: # return only first transcriptions if the line contains several words
+        return " ".join([lst[0] if lst else ERROR_MARKER for lst in transcribed_words])
