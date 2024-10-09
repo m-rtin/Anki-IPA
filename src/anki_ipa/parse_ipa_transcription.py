@@ -101,6 +101,9 @@ def fr_filter(tag: bs4.Tag) -> bool:
     header3_div = tag.find_previous('div', {'class': 'mw-heading3'})
     if header3_div and header3_div.find('h3', {'id': u'Étymologie'}):
         return False
+    # also avoid spelling letter names, most useful for "à"
+    if header3_div and header3_div.find('h3', {'id': u'Lettre'}):
+        return False
     return True
 
 @transcription

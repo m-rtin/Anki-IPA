@@ -55,6 +55,7 @@ class TestParseIpa(unittest.TestCase):
         self.assertEqual(parse_ipa.french("occasion"),  [ "ɔkazjɔ̃" ])
         self.assertEqual(parse_ipa.french("rencontre"), [ "ʁɑ̃kɔ̃tʁ" ])
         self.assertEqual(parse_ipa.french("cheval"), [ "ʃəval", "ʃfal", "ʃval", "ʒval", "ʃoval" ])
+        self.assertEqual(parse_ipa.french("à"),  [ "a", "ɑ" ])
         self.assertEqual(parse_ipa.french("thereisnosuchword"), []) # non-existent word
         self.assertEqual(parse_ipa.french("dog"), []) # not a french word
 
