@@ -85,26 +85,28 @@ def english_transcript(word: str, strip_syllable_separator: bool=True, accents: 
 
 @transcription
 def french(word: str, strip_syllable_separator: bool=True) -> list:
+
+    def fr_filter(tag: bs4.Tag) -> bool:
+        # avoid using non-french transcriptions
+        sectionlangue = tag.find_previous('span', {'class': 'sectionlangue'})
+        if sectionlangue and sectionlangue['id'] and sectionlangue['id'] != 'fr':
+            return False
+        # avoid adding results from flextable as it may contain transcriptions for other forms
+        if tag.find_parent('table', {'class': 'flextable'}):
+            return False
+        # avoid adding results from the etymology section
+        header3_div = tag.find_previous('div', {'class': 'mw-heading3'})
+        if header3_div and header3_div.find('h3', {'id': u'Étymologie'}):
+            return False
+        # also avoid spelling letter names, most useful for "à"
+        if header3_div and header3_div.find('h3', {'id': u'Lettre'}):
+            return False
+        return True
+
     link = f"https://fr.wiktionary.org/wiki/{word}"
     return parse_website(link, {'title': 'Prononciation API'}, strip_syllable_separator,
                          filter_cb = fr_filter)
 
-def fr_filter(tag: bs4.Tag) -> bool:
-    # avoid using non-french transcriptions
-    sectionlangue = tag.find_previous('span', {'class': 'sectionlangue'})
-    if sectionlangue and sectionlangue['id'] and sectionlangue['id'] != 'fr':
-        return False
-    # avoid adding results from flextable as it may contain transcriptions for other forms
-    if tag.find_parent('table', {'class': 'flextable'}):
-        return False
-    # avoid adding results from the etymology section
-    header3_div = tag.find_previous('div', {'class': 'mw-heading3'})
-    if header3_div and header3_div.find('h3', {'id': u'Étymologie'}):
-        return False
-    # also avoid spelling letter names, most useful for "à"
-    if header3_div and header3_div.find('h3', {'id': u'Lettre'}):
-        return False
-    return True
 
 @transcription
 def russian(word: str, strip_syllable_separator: bool=True) -> list:
