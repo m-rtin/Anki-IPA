@@ -16,6 +16,9 @@ from anki.hooks import addHook, wrap
 from aqt import mw
 from aqt.editor import Editor
 from aqt.utils import showInfo
+from aqt.operations import CollectionOp, QueryOp
+from aqt.errors import show_exception
+from anki.collection import Collection, OpChangesOnly
 
 from . import consts, parse_ipa_transcription, utils, batch_adding
 from .config import setup_synced_config, get_default_lang, set_default_lang
@@ -33,6 +36,34 @@ select_elm = ("""<select onchange='pycmd("IPALang:" +"""
               """style='vertical-align: top;'>{}</select>""")
 
 
+class IPAError(Exception):
+    """ A small exception wrapper to distinguish anticipated exception
+    """
+    pass
+
+
+def query_ipa(text: str, lang: str) -> str :
+    """ Query IPA transcription for specified text and language
+
+    :param text: The text to query the transcription for
+    :param lang: The language of the text
+    """
+    # get word list from text
+    words = utils.get_words_from_field(text.lower())
+    logging.debug(f"Word list: {words}")
+
+    # parse IPA transcription for every word in word list
+    try:
+        ipa = parse_ipa_transcription.transcript(words=words, language=lang,
+                                                 strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"],
+                                                 all_transcriptions=CONFIG["ALL_TRANSCRIPTIONS"],
+                                                 failure_strategy=CONFIG["FAILURE_STRATEGY"])
+    except (urllib.error.HTTPError, IndexError):
+        raise IPAError("IPA not found.")
+    logging.debug(f"IPA transcription string: {ipa}")
+    return ipa
+
+
 def paste_ipa(editor: Editor) -> None:
     """ Paste IPA transcription into the IPA field of the Anki editor.
 
@@ -41,41 +72,43 @@ def paste_ipa(editor: Editor) -> None:
     lang_alias = editor.ipa_lang_alias
     note = editor.note
 
-    # Get content of text field
+    def handleIPAError(ex: Exception):
+        # A helper function to distinktly handle our own errors
+        if isinstance(ex, IPAError):
+            showInfo(str(ex))
+        else:
+            show_exception(parent=editor.widget, exception=ex)
+
+    # Get content of text field, avoid doing it in the QueryOp as it's small and we
+    # don't want to block the collection for performing the network queries
     try:
         field_text = note[CONFIG["WORD_FIELD"]]
     except KeyError:
-        showInfo(f"Field '{CONFIG['WORD_FIELD']}' doesn't exist.")
+        handleIPAError(IPAError(f"Field '{CONFIG['WORD_FIELD']}' doesn't exist."))
         return
+
     logging.debug(f"Field text: {field_text}")
 
-    field_text = field_text.lower()
+    def do_update_note(ipa: str):
+        def update_note_op(col: Collection, ipa: str) -> OpChangesOnly :
+            # paste IPA transcription of every word in IPA transcription field
+            try:
+                note[CONFIG["IPA_FIELD"]] = ipa
+            except KeyError:
+                raise IPAError("Field '{CONFIG['IPA_FIELD']}' doesn't exist.")
 
-    # get word list from text field
-    words = utils.get_words_from_field(field_text)
-    logging.debug(f"Word list: {words}")
+            return OpChangesOnly(changes=col.update_notes([note]))
 
-    # parse IPA transcription for every word in word list
-    try:
-        ipa = parse_ipa_transcription.transcript(words=words, language=lang_alias,
-                                                 strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"],
-                                                 all_transcriptions=CONFIG["ALL_TRANSCRIPTIONS"],
-                                                 failure_strategy=CONFIG["FAILURE_STRATEGY"])
-    except (urllib.error.HTTPError, IndexError):
-        showInfo("IPA not found.")
-        return
-    logging.debug(f"IPA transcription string: {ipa}")
+        CollectionOp( parent=editor.widget,
+                      op=lambda col: update_note_op(col, ipa)
+                    ).failure(handleIPAError).run_in_background()
 
-    # paste IPA transcription of every word in IPA transcription field
-    try:
-        note[CONFIG["IPA_FIELD"]] = ipa
-    except KeyError:
-        showInfo(f"Field '{CONFIG['IPA_FIELD']}' doesn't exist.")
-        return
-
-    # update editor
-    editor.loadNote()
-    editor.web.setFocus()
+    QueryOp( parent=editor.widget,
+             op=lambda _: query_ipa(field_text, lang_alias),
+             success=do_update_note
+            ).without_collection() \
+             .failure(handleIPAError) \
+             .run_in_background()
 
 
 def on_setup_buttons(buttons: List[str], editor: Editor) -> List[str]:
