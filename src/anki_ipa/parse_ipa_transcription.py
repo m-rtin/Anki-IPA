@@ -136,16 +136,35 @@ def spanish(word: str, strip_syllable_separator: bool=True) -> list:
 
 @transcription
 def german(word: str, strip_syllable_separator: bool=True) -> list:
-    payload = {'action': 'parse', 'page': word, 'format': 'json', 'prop': 'wikitext'}
-    r = requests.get('https://de.wiktionary.org/w/api.php', params=payload)
-    try:
-        wikitext = r.json()['parse']['wikitext']['*']
-        p = re.compile("{{IPA}}.*?{{Lautschrift\|([^}]+)")
-        m = p.search(wikitext)
-        ipa = m.group(1)
-        return [ipa]
-    except (KeyError, AttributeError):
-        return []
+
+    def de_filter(tag: bs4.Tag) -> bool:
+        # don't add rimes
+        lnk=tag.find('a')
+        if lnk and lnk.get('title') and lnk['title'].startswith('Reim'):
+            return False
+        # use only data from the phonetic paragraph
+        p = tag.find_previous('p')
+        if p and not( p.get('title') and p['title'] == "Phonetik" ):
+            return False
+        # avoid empty transcriptions
+        if tag.getText() == u"…":
+            return False
+        # avoid using non-german transcriptions
+        header2_div = tag.find_previous('div', {'class': 'mw-heading2'})
+        if not header2_div.find('span', {'id': "Deutsch" }):
+            return False
+        return True
+
+    # German wikitionary is a bit messy in sense how it handles capitalization, e.g. it contains
+    # entries for both "Käse" and "käse". It seems the capitalized entries generally are more
+    # complete, but just in case we should check both.
+    for w in [word.capitalize(), word]:
+        link = f"https://de.wiktionary.org/wiki/{w}"
+        ipas = parse_website(link, {'class': 'ipa'}, strip_syllable_separator,
+                             filter_cb = de_filter)
+        if ipas:
+            return ipas
+    return []
 
 @transcription
 def polish(word: str, strip_syllable_separator: bool=True) -> list:

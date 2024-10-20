@@ -69,17 +69,17 @@ class TestParseIpa(unittest.TestCase):
     def test_german(self):
         self.assertEqual(parse_ipa.german("Land"), ["lant"])
         self.assertEqual(parse_ipa.german("blau"), ["blaʊ̯"])
-        self.assertEqual(parse_ipa.german("Kind"), ["kɪnt"])
+        self.assertEqual(parse_ipa.german("kind"), ["kɪnt"])
         self.assertEqual(parse_ipa.german("spielen"), ["ˈʃpiːlən"])
         self.assertEqual(parse_ipa.german("treffen"), ["ˈtʁɛfn̩"])
         self.assertEqual(parse_ipa.german("gelb"), ["ɡɛlp"])
-        self.assertEqual(parse_ipa.german("Mensch"), ["mɛnʃ"])
-        self.assertEqual(parse_ipa.german("Hund"), ["hʊnt"])
+        self.assertEqual(parse_ipa.german("mensch"), ["mɛnʃ"])
+        self.assertEqual(parse_ipa.german("hund"), ["hʊnt"])
         self.assertEqual(parse_ipa.german("grün"), ["ɡʁyːn"])
         self.assertEqual(parse_ipa.german("rot"), ["ʁoːt"])
         self.assertEqual(parse_ipa.german("blau"), ["blaʊ̯"])
         self.assertEqual(parse_ipa.german("braun"), ["bʁaʊ̯n"])
-        self.assertEqual(parse_ipa.german("Hilfe"), ["ˈhɪlfə"])
+        self.assertEqual(parse_ipa.german("hilfe"), ["ˈhɪlfə"])
         self.assertEqual(parse_ipa.german("zwei"), ["t͡svaɪ̯"])
         self.assertEqual(parse_ipa.german("drei"), ["dʁaɪ̯"])
         self.assertEqual(parse_ipa.german("vier"), ["fiːɐ̯"])
@@ -87,13 +87,21 @@ class TestParseIpa(unittest.TestCase):
         self.assertEqual(parse_ipa.german("acht"), ["axt"])
         self.assertEqual(parse_ipa.german("neun"), ["nɔɪ̯n"])
         self.assertEqual(parse_ipa.german("nein"), ["naɪ̯n"])
-        self.assertEqual(parse_ipa.german("Fenster"), ["ˈfɛnstɐ"])
-        self.assertEqual(parse_ipa.german("Ente"), ["ˈɛntə"])
-        self.assertEqual(parse_ipa.german("Katze"), ["ˈkat͡sə"])
-        self.assertEqual(parse_ipa.german("Buch"), ["buːx"])
-        self.assertEqual(parse_ipa.german("Eintrag"), ["ˈaɪ̯nˌtʁaːk"])
-        # :{{IPA}} ''standardsprachlich (gemeindeutsch):'' {{Lautschrift|ʃpɛːt}}
-        self.assertEqual(parse_ipa.german("spät"), ["ʃpɛːt"])
+        self.assertEqual(parse_ipa.german("fenster"), ["ˈfɛnstɐ"])
+        self.assertEqual(parse_ipa.german("ente"), ["ˈɛntə"])
+        self.assertEqual(parse_ipa.german("katze"), ["ˈkat͡sə"])
+        self.assertEqual(parse_ipa.german("buch"), ["buːx"])
+        self.assertEqual(parse_ipa.german("eintrag"), ["ˈaɪ̯nˌtʁaːk"])
+        # multiple transcriptions
+        self.assertEqual(parse_ipa.german("spät"), ["ʃpɛːt", "ʃpeːt"])
+        self.assertEqual(parse_ipa.german("viertel"), ["ˈfɪʁtl̩", "ˈfiːɐ̯tl̩"])
+        self.assertEqual(parse_ipa.german("restaurant"), ["ʁɛstoˈʁɑ̃ː", "ˌʁɛstoˈʁant", "ˌʁɛstoˈʁaŋ"])
+        self.assertEqual(parse_ipa.german("wenig"), ["ˈveːnɪç", "ˈveːnɪk"])
+        self.assertEqual(parse_ipa.german("zug"), ["t͡suːk", "t͡suːɡ"])
+        # error handling
+        self.assertEqual(parse_ipa.german("nosuchword"), [])
+        self.assertEqual(parse_ipa.german("emmener"), []) # not a German word
+
 
     def test_polish(self):
         self.assertEqual(parse_ipa.polish("asteroida"), ["ˌastɛˈrɔjda"])
