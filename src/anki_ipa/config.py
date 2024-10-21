@@ -9,6 +9,11 @@ License: GNU AGPLv3 <https://www.gnu.org/licenses/agpl.html>
 
 from aqt import mw
 
+CONFIG = mw.addonManager.getConfig(__name__)
+
+def save_config() -> None:
+    """Save the shared config"""
+    mw.addonManager.writeConfig(__name__, CONFIG)
 
 def setup_synced_config() -> None:
     """Create new configuration if not already done."""

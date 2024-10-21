@@ -17,11 +17,10 @@ from aqt.operations import CollectionOp
 from anki.collection import Collection, OpChangesOnly
 
 from aqt import mw
-CONFIG = mw.addonManager.getConfig(__name__)
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from . import consts, parse_ipa_transcription, utils
-from .config import get_default_lang
+from .config import get_default_lang, CONFIG, save_config
 
 class AddIpaTranscriptDialog(qt.QDialog):
     """QDialog to add IPA transcription to multiple notes in Anki browser."""
@@ -37,6 +36,7 @@ class AddIpaTranscriptDialog(qt.QDialog):
         self.browser = browser
         self.selected_notes = selected_notes
         self._setup_comboboxes()
+        self._setup_overwrite()
         self._setup_form()
         self._setup_buttons()
         self._setup_progressbar()
@@ -72,6 +72,11 @@ class AddIpaTranscriptDialog(qt.QDialog):
             if idx_ipa > 0:
                 self.field_combobox.setCurrentIndex(idx_ipa)
 
+    def _setup_overwrite(self) -> None:
+        """Setup the overwrite checkbox"""
+        self.overwrite_checkbox = qt.QCheckBox("Overwrite if not empty?", self)
+        self.overwrite_checkbox.setChecked(CONFIG["BATCH_OVERWRITE"])
+
     def _setup_form(self) -> None:
         """Setup form for user interaction."""
         self.form_group_box = qt.QGroupBox("Options")
@@ -81,7 +86,11 @@ class AddIpaTranscriptDialog(qt.QDialog):
         form_layout.addRow(qt.QLabel("Field of word:"), self.base_combobox)
         form_layout.addRow(qt.QLabel("Field of IPA transcription:"), self.field_combobox)
 
-        self.form_group_box.setLayout(form_layout)
+        gb_layout =  qt.QVBoxLayout()
+        gb_layout.addLayout(form_layout)
+        gb_layout.addWidget(self.overwrite_checkbox)
+
+        self.form_group_box.setLayout(gb_layout)
 
     def _setup_progressbar(self) -> None:
         """Setup progressbar which indicates how many IPA transcriptions already have been added."""
@@ -92,17 +101,18 @@ class AddIpaTranscriptDialog(qt.QDialog):
     def _setup_buttons(self) -> None:
         """Setup add button."""
         button_box = qt.QDialogButtonBox(self)
-        add_button = button_box.addButton("Add", qt.QDialogButtonBox.ButtonRole.ActionRole)
+        apply_button = button_box.addButton(qt.QDialogButtonBox.StandardButton.Apply)
 
         self.bottom_hbox = qt.QHBoxLayout()
         self.bottom_hbox.addWidget(button_box)
 
-        add_button.clicked.connect(self.on_confirm)
+        apply_button.clicked.connect(self.on_confirm)
 
     def _setup_main(self) -> None:
         """Setup diag window."""
         main_layout = qt.QVBoxLayout()
         main_layout.addWidget(self.form_group_box)
+        main_layout.addWidget(self.overwrite_checkbox)
         main_layout.addWidget(self.progress)
         main_layout.addLayout(self.bottom_hbox)
         self.setLayout(main_layout)
@@ -131,13 +141,12 @@ class AddIpaTranscriptDialog(qt.QDialog):
         Once it finishes we write the results into the right target fields of all the selected notes.
         We can't do this within the thread because SQLite doesn't support multi-threading.
         """
-        question = f"This will overwrite the current content of the IPA transcription field. Proceed?"
-        if not askUser(question, parent=self):
-            return
-
         notes = self._create_note_dictionary()
 
         self.worker = Worker(notes, self.lang_combobox.currentText(), self.base_combobox.currentText())
+
+        if not self.overwrite_checkbox.isChecked():
+            self.worker.set_target_field(self.field_combobox.currentText())
 
         # connect methods
         self.worker.progress_changed.connect(self.on_progress_changed)
@@ -150,6 +159,11 @@ class AddIpaTranscriptDialog(qt.QDialog):
         self.thread.started.connect(self.worker.run)
         self.thread.finished.connect(self.close)
         self.thread.start()
+
+        CONFIG['BATCH_OVERWRITE'] = self.overwrite_checkbox.isChecked()
+
+        save_config()
+
 
     def _create_note_dictionary(self) -> Dict[int, anki.notes.Note]:
         """Map each note id to the corresponding Anki note object."""
@@ -208,13 +222,25 @@ class Worker(qt.QObject):
         self.lang = lang
         self.base_field = base_field
         self._isRunning = True
+        self.target_field = None
+
+    def set_target_field(self, target_field: Optional[str]):
+        """ Sets the target_field, a field where IPA transcriptions will be eventually saved.
+        The worker doesn't save the transcriptions on its own, but if set and the field of a note
+        is non-empty the note will be skipped.
+        """
+        self.target_field = target_field
 
     @qt.pyqtSlot()
     def run(self) -> None:
         """Get IPA transcription for each note and save it into a dictionary."""
         new_dict = dict()
         for index, key in enumerate(self.notes.keys()):
+            if not self._isRunning:
+                break
             try:
+                if self.target_field and self.notes[key][self.target_field]:
+                    continue
                 words = utils.get_words_from_field(field_text=self.notes[key][self.base_field])
                 new_dict[key] = parse_ipa_transcription.transcript(words=words, language=self.lang,
                                                  strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"],

@@ -26,3 +26,7 @@ Help for configuration options.
     - `'partial'` - replace with error markers only failed transcriptions of specific words. In multi-word phrases, don't display anything if the whole phrase failed.
     - `'whole'` - display an error for whole phrases only. If a transcription for a single word failed in a multi-word phrase, the whole phrase will be displayed as erroneous.
     - `'hide'` - all failure will be silently ignored and no transcriptions will be added. If any word of a multi-word phrase lack a transcription the whole phrase will be dropped.
+
+&nbsp;
+
+- `"BATCH_OVERWRITE"`: whether or not overwrite existing valuses while in batch mode (availible in GUI)

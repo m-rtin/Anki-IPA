@@ -4,5 +4,6 @@
     "KEYBOARD_SHORTCUT": "Ctrl+Shift+Z",
     "STRIP_SYLLABLE_SEPARATOR": true,
     "ALL_TRANSCRIPTIONS": true,
-    "FAILURE_STRATEGY": "show"
+    "FAILURE_STRATEGY": "show",
+    "BATCH_OVERWRITE": false
 }

@@ -21,7 +21,7 @@ from aqt.errors import show_exception
 from anki.collection import Collection, OpChangesOnly
 
 from . import consts, parse_ipa_transcription, utils, batch_adding
-from .config import setup_synced_config, get_default_lang, set_default_lang
+from .config import setup_synced_config, get_default_lang, set_default_lang, CONFIG
 from typing import List, Callable
 
 filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app.log")
@@ -29,7 +29,6 @@ logging.basicConfig(filename=filename, level=logging.DEBUG)
 
 ADDON_PATH = os.path.dirname(__file__)
 ICON_PATH = os.path.join(ADDON_PATH, "icons", "button.png")
-CONFIG = mw.addonManager.getConfig(__name__)
 
 select_elm = ("""<select onchange='pycmd("IPALang:" +"""
               """ this.selectedOptions[0].text)' """
