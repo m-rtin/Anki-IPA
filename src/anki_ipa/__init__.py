@@ -16,9 +16,12 @@ from anki.hooks import addHook, wrap
 from aqt import mw
 from aqt.editor import Editor
 from aqt.utils import showInfo
+from aqt.operations import CollectionOp, QueryOp
+from aqt.errors import show_exception
+from anki.collection import Collection, OpChangesOnly
 
 from . import consts, parse_ipa_transcription, utils, batch_adding
-from .config import setup_synced_config
+from .config import setup_synced_config, get_default_lang, set_default_lang, CONFIG
 from typing import List, Callable
 
 filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app.log")
@@ -26,11 +29,38 @@ logging.basicConfig(filename=filename, level=logging.DEBUG)
 
 ADDON_PATH = os.path.dirname(__file__)
 ICON_PATH = os.path.join(ADDON_PATH, "icons", "button.png")
-CONFIG = mw.addonManager.getConfig(__name__)
 
 select_elm = ("""<select onchange='pycmd("IPALang:" +"""
               """ this.selectedOptions[0].text)' """
               """style='vertical-align: top;'>{}</select>""")
+
+
+class IPAError(Exception):
+    """ A small exception wrapper to distinguish anticipated exception
+    """
+    pass
+
+
+def query_ipa(text: str, lang: str) -> str :
+    """ Query IPA transcription for specified text and language
+
+    :param text: The text to query the transcription for
+    :param lang: The language of the text
+    """
+    # get word list from text
+    words = utils.get_words_from_field(text.lower())
+    logging.debug(f"Word list: {words}")
+
+    # parse IPA transcription for every word in word list
+    try:
+        ipa = parse_ipa_transcription.transcript(words=words, language=lang,
+                                                 strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"],
+                                                 all_transcriptions=CONFIG["ALL_TRANSCRIPTIONS"],
+                                                 failure_strategy=CONFIG["FAILURE_STRATEGY"])
+    except (urllib.error.HTTPError, IndexError):
+        raise IPAError("IPA not found.")
+    logging.debug(f"IPA transcription string: {ipa}")
+    return ipa
 
 
 def paste_ipa(editor: Editor) -> None:
@@ -41,67 +71,43 @@ def paste_ipa(editor: Editor) -> None:
     lang_alias = editor.ipa_lang_alias
     note = editor.note
 
-    # Get content of text field
+    def handleIPAError(ex: Exception):
+        # A helper function to distinktly handle our own errors
+        if isinstance(ex, IPAError):
+            showInfo(str(ex))
+        else:
+            show_exception(parent=editor.widget, exception=ex)
+
+    # Get content of text field, avoid doing it in the QueryOp as it's small and we
+    # don't want to block the collection for performing the network queries
     try:
         field_text = note[CONFIG["WORD_FIELD"]]
     except KeyError:
-        showInfo(f"Field '{CONFIG['WORD_FIELD']}' doesn't exist.")
+        handleIPAError(IPAError(f"Field '{CONFIG['WORD_FIELD']}' doesn't exist."))
         return
+
     logging.debug(f"Field text: {field_text}")
 
-    field_text = field_text.lower()
+    def do_update_note(ipa: str):
+        def update_note_op(col: Collection, ipa: str) -> OpChangesOnly :
+            # paste IPA transcription of every word in IPA transcription field
+            try:
+                note[CONFIG["IPA_FIELD"]] = ipa
+            except KeyError:
+                raise IPAError("Field '{CONFIG['IPA_FIELD']}' doesn't exist.")
 
-    # get word list from text field
-    words = utils.get_words_from_field(field_text)
-    logging.debug(f"Word list: {words}")
+            return OpChangesOnly(changes=col.update_notes([note]))
 
-    # parse IPA transcription for every word in word list
-    try:
-        ipa = parse_ipa_transcription.transcript(words=words, language=lang_alias, strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"])
-    except (urllib.error.HTTPError, IndexError):
-        showInfo("IPA not found.")
-        return
-    logging.debug(f"IPA transcription string: {ipa}")
+        CollectionOp( parent=editor.widget,
+                      op=lambda col: update_note_op(col, ipa)
+                    ).failure(handleIPAError).run_in_background()
 
-    # paste IPA transcription of every word in IPA transcription field
-    try:
-        note[CONFIG["IPA_FIELD"]] = ipa
-    except KeyError:
-        showInfo(f"Field '{CONFIG['IPA_FIELD']}' doesn't exist.")
-        return
-
-    # update editor
-    editor.loadNote()
-    editor.web.setFocus()
-
-
-def get_deck_name(main_window: mw) -> str:
-    """ Get the name of the current deck.
-
-    :param main_window: main window of Anki
-    :return: name of selected deck
-    """
-    try:
-        deck_name = main_window.col.decks.current()['name']
-    except AttributeError:
-        # No deck opened?
-        deck_name = None
-    return deck_name
-
-
-def get_default_lang(main_window: mw) -> str:
-    """ Get the IPA default language.
-
-    :param main_window: main window of Anki
-    :return: default IPA language for Anki or Anki deck
-    """
-    config = mw.col.conf['anki_ipa_conf']
-    lang = config['lang']
-    if config['defaultlangperdeck']:
-        deck_name = get_deck_name(main_window)
-        if deck_name and deck_name in config['deckdefaultlang']:
-            lang = config['deckdefaultlang'][deck_name]
-    return lang
+    QueryOp( parent=editor.widget,
+             op=lambda _: query_ipa(field_text, lang_alias),
+             success=do_update_note
+            ).without_collection() \
+             .failure(handleIPAError) \
+             .run_in_background()
 
 
 def on_setup_buttons(buttons: List[str], editor: Editor) -> List[str]:
@@ -138,20 +144,6 @@ def on_setup_buttons(buttons: List[str], editor: Editor) -> List[str]:
     buttons.append(combo)
 
     return buttons
-
-
-def set_default_lang(main_window: mw, lang: str) -> None:
-    """ Set new IPA default language.
-
-    :param main_window: main window of Anki
-    :param lang: new default language
-    """
-    config = mw.col.conf['anki_ipa_conf']
-    config['lang'] = lang  # Always update the overall default
-    if config['defaultlangperdeck']:
-        deck_name = get_deck_name(main_window)
-        if deck_name:
-            config['deckdefaultlang'][deck_name] = lang
 
 
 def on_ipa_language_select(editor: Editor, lang: str) -> None:

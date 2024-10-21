@@ -13,11 +13,14 @@ from aqt.utils import tooltip, askUser
 import aqt.qt as qt
 import anki
 
-from aqt import mw
-CONFIG = mw.addonManager.getConfig(__name__)
+from aqt.operations import CollectionOp
+from anki.collection import Collection, OpChangesOnly
 
-from typing import List, Dict
+from aqt import mw
+
+from typing import List, Dict, Optional
 from . import consts, parse_ipa_transcription, utils
+from .config import get_default_lang, CONFIG, save_config
 
 class AddIpaTranscriptDialog(qt.QDialog):
     """QDialog to add IPA transcription to multiple notes in Anki browser."""
@@ -33,6 +36,7 @@ class AddIpaTranscriptDialog(qt.QDialog):
         self.browser = browser
         self.selected_notes = selected_notes
         self._setup_comboboxes()
+        self._setup_overwrite()
         self._setup_form()
         self._setup_buttons()
         self._setup_progressbar()
@@ -44,10 +48,17 @@ class AddIpaTranscriptDialog(qt.QDialog):
 
         self.lang_combobox = qt.QComboBox()
         self.lang_combobox.addItems(consts.LANGUAGES_MAP.values())
+
         if "LANGUAGE" in CONFIG.keys():
-            idx_language=self.lang_combobox.findText(CONFIG["LANGUAGE"])
+            language = CONFIG["LANGUAGE"]
+        else:
+            language = consts.LANGUAGES_MAP.get(get_default_lang(self.browser.mw), None)
+
+        if language:
+            idx_language=self.lang_combobox.findText(language)
             if idx_language > 0:
                 self.lang_combobox.setCurrentIndex(idx_language)
+
         self.base_combobox = qt.QComboBox()
         self.base_combobox.addItems(fields)
         if "WORD_FIELD" in CONFIG.keys():
@@ -61,6 +72,11 @@ class AddIpaTranscriptDialog(qt.QDialog):
             if idx_ipa > 0:
                 self.field_combobox.setCurrentIndex(idx_ipa)
 
+    def _setup_overwrite(self) -> None:
+        """Setup the overwrite checkbox"""
+        self.overwrite_checkbox = qt.QCheckBox("Overwrite if not empty?", self)
+        self.overwrite_checkbox.setChecked(CONFIG["BATCH_OVERWRITE"])
+
     def _setup_form(self) -> None:
         """Setup form for user interaction."""
         self.form_group_box = qt.QGroupBox("Options")
@@ -70,7 +86,11 @@ class AddIpaTranscriptDialog(qt.QDialog):
         form_layout.addRow(qt.QLabel("Field of word:"), self.base_combobox)
         form_layout.addRow(qt.QLabel("Field of IPA transcription:"), self.field_combobox)
 
-        self.form_group_box.setLayout(form_layout)
+        gb_layout =  qt.QVBoxLayout()
+        gb_layout.addLayout(form_layout)
+        gb_layout.addWidget(self.overwrite_checkbox)
+
+        self.form_group_box.setLayout(gb_layout)
 
     def _setup_progressbar(self) -> None:
         """Setup progressbar which indicates how many IPA transcriptions already have been added."""
@@ -80,18 +100,19 @@ class AddIpaTranscriptDialog(qt.QDialog):
 
     def _setup_buttons(self) -> None:
         """Setup add button."""
-        button_box = qt.QDialogButtonBox(qt.Qt.Horizontal, self)
-        add_button = button_box.addButton("Add", qt.QDialogButtonBox.ActionRole)
+        button_box = qt.QDialogButtonBox(self)
+        apply_button = button_box.addButton(qt.QDialogButtonBox.StandardButton.Apply)
 
         self.bottom_hbox = qt.QHBoxLayout()
         self.bottom_hbox.addWidget(button_box)
 
-        add_button.clicked.connect(self.on_confirm)
+        apply_button.clicked.connect(self.on_confirm)
 
     def _setup_main(self) -> None:
         """Setup diag window."""
         main_layout = qt.QVBoxLayout()
         main_layout.addWidget(self.form_group_box)
+        main_layout.addWidget(self.overwrite_checkbox)
         main_layout.addWidget(self.progress)
         main_layout.addLayout(self.bottom_hbox)
         self.setLayout(main_layout)
@@ -120,13 +141,12 @@ class AddIpaTranscriptDialog(qt.QDialog):
         Once it finishes we write the results into the right target fields of all the selected notes.
         We can't do this within the thread because SQLite doesn't support multi-threading.
         """
-        question = f"This will overwrite the current content of the IPA transcription field. Proceed?"
-        if not askUser(question, parent=self):
-            return
-
         notes = self._create_note_dictionary()
 
         self.worker = Worker(notes, self.lang_combobox.currentText(), self.base_combobox.currentText())
+
+        if not self.overwrite_checkbox.isChecked():
+            self.worker.set_target_field(self.field_combobox.currentText())
 
         # connect methods
         self.worker.progress_changed.connect(self.on_progress_changed)
@@ -139,6 +159,11 @@ class AddIpaTranscriptDialog(qt.QDialog):
         self.thread.started.connect(self.worker.run)
         self.thread.finished.connect(self.close)
         self.thread.start()
+
+        CONFIG['BATCH_OVERWRITE'] = self.overwrite_checkbox.isChecked()
+
+        save_config()
+
 
     def _create_note_dictionary(self) -> Dict[int, anki.notes.Note]:
         """Map each note id to the corresponding Anki note object."""
@@ -154,22 +179,17 @@ class AddIpaTranscriptDialog(qt.QDialog):
 
         :param result_dict: dictionary of Anki notes and their IPA transcriptions
         """
-        mw = self.browser.mw
-        mw.checkpoint("add ipa transcription")
-        mw.progress.start()
-        self.browser.model.beginReset()
-
-        for note_id, ipa_transcription in result_dict.items():
-            note = mw.col.get_note(note_id)
+        def op(col: Collection) -> OpChangesOnly :
+            notes = []
             target_field = self.field_combobox.currentText()
-            note[target_field] = ipa_transcription
-            note.flush()
+            for note_id, ipa_transcription in result_dict.items():
+                note = col.get_note(note_id)
+                note[target_field] = ipa_transcription
+                notes.append(note)
 
-        self.browser.model.endReset()
-        # mw.requireReset()
-        mw.CollectionOp()
-        mw.progress.finish()
-        mw.reset()
+            return OpChangesOnly(changes=col.update_notes(notes))
+
+        CollectionOp(parent=self.browser, op=op).run_in_background()
 
     def closeEvent(self, event: qt.QCloseEvent) -> None:
         """ Stop worker and thread when window is closed by user.
@@ -202,15 +222,30 @@ class Worker(qt.QObject):
         self.lang = lang
         self.base_field = base_field
         self._isRunning = True
+        self.target_field = None
+
+    def set_target_field(self, target_field: Optional[str]):
+        """ Sets the target_field, a field where IPA transcriptions will be eventually saved.
+        The worker doesn't save the transcriptions on its own, but if set and the field of a note
+        is non-empty the note will be skipped.
+        """
+        self.target_field = target_field
 
     @qt.pyqtSlot()
     def run(self) -> None:
         """Get IPA transcription for each note and save it into a dictionary."""
         new_dict = dict()
         for index, key in enumerate(self.notes.keys()):
+            if not self._isRunning:
+                break
             try:
+                if self.target_field and self.notes[key][self.target_field]:
+                    continue
                 words = utils.get_words_from_field(field_text=self.notes[key][self.base_field])
-                new_dict[key] = parse_ipa_transcription.transcript(words=words, language=self.lang)
+                new_dict[key] = parse_ipa_transcription.transcript(words=words, language=self.lang,
+                                                 strip_syllable_separator=CONFIG["STRIP_SYLLABLE_SEPARATOR"],
+                                                 all_transcriptions=CONFIG["ALL_TRANSCRIPTIONS"],
+                                                 failure_strategy=CONFIG["FAILURE_STRATEGY"])
             # IPA transcription not found
             except (urllib.error.HTTPError, IndexError):
                 continue
@@ -235,7 +270,7 @@ def on_batch_edit(browser: Browser) -> None:
         tooltip("No cards selected.")
         return
     dialog = AddIpaTranscriptDialog(browser, selected_notes)
-    dialog.exec_()
+    dialog.exec()
 
 
 def setup_menu(browser: Browser) -> None:
